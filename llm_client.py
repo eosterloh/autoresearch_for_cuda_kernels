@@ -109,6 +109,20 @@ def _ollama_call(messages: list[dict]) -> dict:
                 timeout=OLLAMA_TIMEOUT,
             )
             resp.raise_for_status()
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                body_text = exc.response.text[:300]
+                raise RuntimeError(
+                    f"Ollama model '{OLLAMA_MODEL}' not found. "
+                    f"Run: ollama pull {OLLAMA_MODEL}\n"
+                    f"Available models: ollama list\n"
+                    f"Raw: {body_text}"
+                ) from exc
+            logger.warning("Ollama request error (attempt %d): %s", attempt, exc)
+            if attempt == MAX_OLLAMA_RETRIES:
+                raise RuntimeError(f"Ollama unavailable after {attempt} attempts: {exc}") from exc
+            time.sleep(2 ** attempt)
+            continue
         except requests.RequestException as exc:
             logger.warning("Ollama request error (attempt %d): %s", attempt, exc)
             if attempt == MAX_OLLAMA_RETRIES:
