@@ -17,7 +17,7 @@ a corrective system injection. After exhausting retries, escalates to Anthropic.
 
 Anthropic path
 --------------
-Uses the native tool-use API (claude-sonnet-4-6). Anthropic enforces structured
+Uses the native tool-use API (claude-opus-4-8). Anthropic enforces structured
 tool-call responses natively, so no JSON forcing is needed.
 
 If Anthropic also fails (API error / network): escalates to human_loop.
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 MAX_OLLAMA_RETRIES = 3
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "nemotron-nano")
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
 
 
@@ -164,7 +164,7 @@ def _ollama_call(messages: list[dict]) -> dict:
 
 def _anthropic_call(messages: list[dict]) -> dict:
     """
-    Falls back to Anthropic claude-sonnet-4-6 with native tool-use API.
+    Falls back to Anthropic claude-opus-4-8 with native tool-use API.
     Returns a tool_call dict: {"name": str, "arguments": dict}
     """
     try:

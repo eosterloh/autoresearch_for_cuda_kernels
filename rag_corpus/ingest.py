@@ -101,7 +101,7 @@ def chunk_cu_file(path: Path, source_label: str) -> list[dict]:
 
 
 def _make_chunk(text: str, path: Path, source: str, func_name: str) -> dict:
-    uid = hashlib.sha256(f"{source}:{path}:{func_name}:{text[:64]}".encode()).hexdigest()[:16]
+    uid = hashlib.sha256(f"{source}:{path}:{func_name}:{text}".encode()).hexdigest()[:20]
     return {
         "id": uid,
         "text": text[:4000],  # ChromaDB document limit
@@ -149,10 +149,14 @@ def upsert_chunks(collection, chunks: list[dict]) -> int:
     valid_docs  = []
     valid_embeds= []
     valid_metas = []
+    seen_ids: set[str] = set()
 
     for chunk, emb in zip(chunks, embeds):
         if emb is None:
             continue
+        if chunk["id"] in seen_ids:
+            continue
+        seen_ids.add(chunk["id"])
         valid_ids.append(chunk["id"])
         valid_docs.append(chunk["text"])
         valid_embeds.append(emb)
