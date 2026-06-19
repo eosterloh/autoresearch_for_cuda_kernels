@@ -199,7 +199,7 @@ def _anthropic_call(messages: list[dict]) -> dict:
             system=system_msg or anthropic.NOT_GIVEN,
             tools=anthropic_tools or anthropic.NOT_GIVEN,
             messages=conv_messages,
-            tool_choice={"type": "auto"},
+            tool_choice={"type": "any"},  # force a tool call, never plain text
         )
     except anthropic.APIError as exc:
         raise RuntimeError(f"Anthropic API error: {exc}") from exc
@@ -210,17 +210,23 @@ def _anthropic_call(messages: list[dict]) -> dict:
         "anthropic",
     )
 
-    # Extract tool use block
+    # Extract native tool_use block (expected path with tool_choice=any)
     for block in response.content:
         if block.type == "tool_use":
             return {"name": block.name, "arguments": block.input}
 
-    # Model replied with text instead of a tool call — shouldn't happen with tool_choice=auto
-    text_content = " ".join(
-        b.text for b in response.content if hasattr(b, "text")
-    )
+    # Fallback: model returned text with embedded JSON (system prompt override)
+    text_content = " ".join(b.text for b in response.content if hasattr(b, "text"))
+    try:
+        parsed = json.loads(text_content)
+        tc = parsed.get("tool_call", {})
+        if tc.get("name") and "arguments" in tc:
+            return {"name": tc["name"], "arguments": tc["arguments"]}
+    except (json.JSONDecodeError, AttributeError):
+        pass
+
     raise RuntimeError(
-        f"Anthropic returned text instead of tool call: {text_content[:300]}"
+        f"Anthropic returned no usable tool call: {text_content[:300]}"
     )
 
 

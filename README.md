@@ -65,11 +65,26 @@ cp .env.example .env
 source .env
 ```
 
-### 3. Ollama — pull the two models
+### 3. Ollama — start the server and pull the two models
 
+Ollama is a native binary, not Docker. It must be running before the agent starts.
+
+```bash
+# Start Ollama in a dedicated tmux window (keeps running after SSH disconnect)
+tmux new-window -n ollama
+ollama serve
+# You should see: Listening on 127.0.0.1:11434
+```
+
+Then in another window, pull the models:
 ```bash
 ollama pull nemotron-nano          # orchestrator LLM (~30B, primary)
 ollama pull nomic-embed-text       # RAG embedding model
+```
+
+To verify Ollama is up at any time:
+```bash
+curl http://localhost:11434/api/tags
 ```
 
 ### 4. HuggingFace — accept the Gemma 3 licence
