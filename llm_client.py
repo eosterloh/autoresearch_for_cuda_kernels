@@ -277,10 +277,12 @@ def call(messages: list[dict]) -> dict:
       3. On failure, call human escalation callback and re-raise
     """
     # --- Ollama ---
+    ollama_err_msg = ""
     try:
         return _ollama_call(messages)
-    except RuntimeError as ollama_err:
-        logger.warning("Ollama exhausted, escalating to Anthropic: %s", ollama_err)
+    except RuntimeError as e:
+        ollama_err_msg = str(e)
+        logger.warning("Ollama exhausted, escalating to Anthropic: %s", e)
 
     # --- Anthropic ---
     try:
@@ -290,7 +292,7 @@ def call(messages: list[dict]) -> dict:
         subject = "LLM routing failure"
         body = (
             f"Both Ollama and Anthropic failed to produce a valid tool call.\n\n"
-            f"Ollama error: {ollama_err}\n"
+            f"Ollama error: {ollama_err_msg}\n"
             f"Anthropic error: {anthropic_err}\n\n"
             "Reply with instructions for how to continue, or 'abort' to stop the run."
         )

@@ -18,6 +18,7 @@ Required env vars
 
 from __future__ import annotations
 
+import html
 import logging
 import os
 import time
@@ -60,9 +61,9 @@ class HumanLoop:
             if state.human_interventions is not None:
                 state.human_interventions += 1
 
-        header = f"⚠️ *AGENT NEEDS INPUT*\n\n*{subject}*\n\n"
-        footer = "\n\n_State saved to state.json — reply to resume._"
-        full_text = header + body + footer
+        header = f"⚠️ <b>AGENT NEEDS INPUT</b>\n\n<b>{html.escape(subject)}</b>\n\n"
+        footer = "\n\n<i>State saved to state.json — reply to resume.</i>"
+        full_text = header + html.escape(body) + footer
 
         # Split if over limit
         chunks = self._split_message(full_text)
@@ -72,7 +73,7 @@ class HumanLoop:
     def notify(self, message: str) -> None:
         """Non-blocking notification (no wait_for_reply). Used for budget alerts."""
         try:
-            self._send_message(f"ℹ️ {message}")
+            self._send_message(f"ℹ️ {html.escape(message)}")
         except Exception as exc:
             logger.warning("Non-blocking Telegram notify failed: %s", exc)
 
@@ -126,7 +127,7 @@ class HumanLoop:
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
             "text": text,
-            "parse_mode": "Markdown",
+            "parse_mode": "HTML",
         }
         try:
             resp = requests.post(url, json=payload, timeout=10)

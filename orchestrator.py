@@ -319,7 +319,7 @@ def _run_phase_c(state: AgentState) -> bool:
 
 def _send_final_report(state: AgentState, reason: str) -> None:
     lines = [
-        f"*Autoresearch Agent — Run Complete*",
+        f"<b>Autoresearch Agent — Run Complete</b>",
         f"Stop reason: {reason}",
         f"Duration: {state.elapsed_hours():.2f}h",
         f"Iterations: {state.iteration}",
