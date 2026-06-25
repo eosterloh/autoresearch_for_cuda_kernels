@@ -213,8 +213,19 @@ def _run_phase_a_step(state: AgentState, budget: TokenBudget) -> None:
         state.conversation_history.append({"role": "user", "content": reward_message})
         logger.info(reward_message)
 
+        # Log this iteration
+        is_best = reward > state.best_reward
+        state.iteration_log.append({
+            "iteration": state.iteration,
+            "reward": reward,
+            "speedup_ratio": bench_r.get("speedup_ratio", 0.0),
+            "latency_ms": result.get("latency_ms", 0.0),
+            "correctness_passed": result.get("correctness_passed", False),
+            "is_best": is_best,
+        })
+
         # Update best kernel tracking
-        if reward > state.best_reward:
+        if is_best:
             state.best_reward = reward
             src = PROJECT_ROOT / "sandbox" / "current_kernel.cu"
             if src.exists():
@@ -317,24 +328,85 @@ def _run_phase_c(state: AgentState) -> bool:
 # Termination                                                          #
 # ------------------------------------------------------------------ #
 
-def _send_final_report(state: AgentState, reason: str) -> None:
-    lines = [
-        f"<b>Autoresearch Agent — Run Complete</b>",
+def _send_final_report(state: AgentState, reason: str, budget: TokenBudget) -> None:
+    tu = state.token_usage
+    ollama_total = tu["ollama_input"] + tu["ollama_output"]
+    anthropic_total = tu["anthropic_input"] + tu["anthropic_output"]
+
+    # ── Detailed stdout report ───────────────────────────────────────────
+    sep = "=" * 66
+    print(f"\n{sep}")
+    print("  AUTORESEARCH AGENT — FINAL REPORT")
+    print(sep)
+    print(f"  Stop reason : {reason}")
+    print(f"  Duration    : {state.elapsed_hours():.2f}h")
+    print(f"  Iterations  : {state.iteration}")
+    print(f"  Phase B gate: {'PASSED ✓' if state.gate_passed else 'not reached'}")
+    print()
+    print("  TOKEN USAGE")
+    print(f"    Ollama  (local, free) : {ollama_total:>12,}  "
+          f"(in {tu['ollama_input']:,} / out {tu['ollama_output']:,})")
+    print(f"    Anthropic (billed)    : {anthropic_total:>12,}  "
+          f"(in {tu['anthropic_input']:,} / out {tu['anthropic_output']:,})")
+    print(f"    Grand total           : {state.total_tokens():>12,}")
+    print(f"    Anthropic budget cap  : {budget.max_tokens:>12,}  "
+          f"({budget.percent_used()*100:.1f}% used)")
+    print()
+    print("  BEST KERNEL")
+    print(f"    Reward : {state.best_reward:+d}")
+    print(f"    Path   : {state.best_kernel_path or 'none'}")
+
+    if state.phase_c_results:
+        r = state.phase_c_results
+        print()
+        print("  PHASE C RESULTS")
+        print(f"    TTFT : {r.get('ttft_ms', 'N/A')} ms")
+        print(f"    TPS  : {r.get('tps', 'N/A')} tokens/s")
+
+    if state.iteration_log:
+        print()
+        print("  REWARD HISTORY  (speed-test iterations only)")
+        print(f"  {'Iter':>5}  {'Reward':>7}  {'Speedup':>8}  {'Latency':>9}  {'Correct':>7}  {'Note'}")
+        print(f"  {'-'*5}  {'-'*7}  {'-'*8}  {'-'*9}  {'-'*7}  {'-'*10}")
+        for e in state.iteration_log:
+            note = "← BEST" if e["is_best"] else ""
+            print(
+                f"  {e['iteration']:>5}  "
+                f"  {e['reward']:>+6}  "
+                f"  {e['speedup_ratio']:>7.3f}x  "
+                f"  {e['latency_ms']:>7.2f}ms  "
+                f"  {'✓' if e['correctness_passed'] else '✗':>7}  "
+                f"  {note}"
+            )
+
+        best_entries = [e for e in state.iteration_log if e["is_best"]]
+        if best_entries:
+            print()
+            print("  PATH TO BEST KERNEL")
+            for e in best_entries:
+                print(f"    Iter {e['iteration']:>3}: reward {e['reward']:+d}, "
+                      f"speedup {e['speedup_ratio']:.3f}x, "
+                      f"latency {e['latency_ms']:.2f}ms")
+
+    print(sep)
+    print()
+
+    # ── Telegram summary (brief) ─────────────────────────────────────────
+    tg_lines = [
+        "<b>Autoresearch Agent — Run Complete</b>",
         f"Stop reason: {reason}",
-        f"Duration: {state.elapsed_hours():.2f}h",
-        f"Iterations: {state.iteration}",
-        f"Best reward: {state.best_reward:+d}",
+        f"Duration: {state.elapsed_hours():.2f}h  |  Iterations: {state.iteration}",
+        f"Best reward: {state.best_reward:+d}  |  Gate: {'passed ✓' if state.gate_passed else 'not reached'}",
+        f"Ollama tokens: {ollama_total:,} (free)",
+        f"Anthropic tokens: {anthropic_total:,} / {budget.max_tokens:,} ({budget.percent_used()*100:.1f}%)",
         f"Best kernel: {state.best_kernel_path or 'none'}",
-        f"Phase B gate passed: {state.gate_passed}",
-        f"Human interventions: {state.human_interventions}",
-        f"Tokens used: {state.total_tokens():,}",
     ]
     if state.phase_c_results:
         r = state.phase_c_results
-        lines.append(f"Phase C — TTFT: {r.get('ttft_ms', 'N/A')}ms | TPS: {r.get('tps', 'N/A')}")
+        tg_lines.append(f"Phase C — TTFT: {r.get('ttft_ms','N/A')}ms | TPS: {r.get('tps','N/A')}")
 
-    human_loop.notify("\n".join(lines))
-    logger.info("Final report sent via Telegram")
+    human_loop.notify("\n".join(tg_lines))
+    logger.info("Final report printed and sent")
 
 
 # ------------------------------------------------------------------ #
@@ -452,7 +524,7 @@ def main() -> None:
         stop_reason = f"Unhandled exception: {type(exc).__name__}"
     finally:
         state.save(STATE_FILE)
-        _send_final_report(state, stop_reason)
+        _send_final_report(state, stop_reason, budget)
         logger.info("Agent stopped. Reason: %s", stop_reason)
 
 

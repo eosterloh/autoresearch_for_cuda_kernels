@@ -73,7 +73,7 @@ class HumanLoop:
     def notify(self, message: str) -> None:
         """Non-blocking notification (no wait_for_reply). Used for budget alerts."""
         try:
-            self._send_message(f"ℹ️ {html.escape(message)}")
+            self._send_message(f"ℹ️ {message}")
         except Exception as exc:
             logger.warning("Non-blocking Telegram notify failed: %s", exc)
 

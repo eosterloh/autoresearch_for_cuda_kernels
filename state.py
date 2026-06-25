@@ -50,6 +50,10 @@ class AgentState:
     human_interventions: int = 0
     last_compile_result: dict[str, Any] = field(default_factory=dict)
 
+    # Per-iteration reward log for final report
+    # Each entry: {iteration, reward, speedup_ratio, latency_ms, correctness_passed, is_best}
+    iteration_log: list[dict[str, Any]] = field(default_factory=list)
+
     # ------------------------------------------------------------------ #
     # Persistence                                                          #
     # ------------------------------------------------------------------ #

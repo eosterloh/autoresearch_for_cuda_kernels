@@ -74,7 +74,7 @@ class TokenBudget:
             if self._halt_callback:
                 self._halt_callback()
             raise TokenBudgetExceededError(
-                f"Session token budget exhausted: {self.total():,} / {self.max_tokens:,}"
+                f"Anthropic token budget exhausted: {self.anthropic_total():,} / {self.max_tokens:,}"
             )
 
         if pct >= self.ALERT_THRESHOLD and not self._alert_fired:
@@ -95,22 +95,29 @@ class TokenBudget:
     # Inspection                                                           #
     # ------------------------------------------------------------------ #
 
+    def anthropic_total(self) -> int:
+        """Tokens billed to Anthropic API — used for the budget cap."""
+        return self._totals["anthropic_input"] + self._totals["anthropic_output"]
+
     def total(self) -> int:
+        """All tokens across all sources (for reporting)."""
         return sum(self._totals.values())
 
     def percent_used(self) -> float:
-        return self.total() / self.max_tokens
+        """Budget percentage based on Anthropic tokens only."""
+        return self.anthropic_total() / self.max_tokens
 
     def remaining(self) -> int:
-        return max(0, self.max_tokens - self.total())
+        return max(0, self.max_tokens - self.anthropic_total())
 
     def summary(self) -> dict:
         return {
             **self._totals,
-            "total": self.total(),
-            "max": self.max_tokens,
+            "anthropic_total": self.anthropic_total(),
+            "grand_total": self.total(),
+            "max_anthropic": self.max_tokens,
             "percent_used": round(self.percent_used() * 100, 2),
         }
 
     def exhausted(self) -> bool:
-        return self.total() >= self.max_tokens
+        return self.anthropic_total() >= self.max_tokens
